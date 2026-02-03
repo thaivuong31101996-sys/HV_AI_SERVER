@@ -2,3 +2,4 @@ fastapi
 python-docx
 uvicorn
 python-multipart
+python-magic
