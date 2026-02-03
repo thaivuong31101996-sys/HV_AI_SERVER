@@ -1,49 +1,44 @@
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from docx import Document
-from docx.shared import Cm, Pt
-from docx.oxml.ns import qn
-import io, re
+from docx.shared import Cm
+import io
 
 app = FastAPI()
+
+# THƯ VIỆN QUY ĐỊNH CỦA CÁC TRƯỜNG (AI TỰ HỌC)
+SCHOOL_RULES = {
+    "VAN LANG": {"left": 3.0, "right": 2.0, "top": 2.0, "bottom": 2.0},
+    "BACH KHOA": {"left": 3.5, "right": 2.0, "top": 2.0, "bottom": 2.0},
+    "DEFAULT": {"left": 3.0, "right": 2.0, "top": 2.0, "bottom": 2.0}
+}
 
 @app.get("/")
 async def home():
     return {"message": "Shop Hai Vuong AI is Ready!"}
 
 @app.post("/process")
-async def process_word(
-    file: UploadFile = File(...),
-    le_trai: float = Form(3.0), le_phai: float = Form(2.0),
-    le_tren: float = Form(2.0), le_duoi: float = Form(2.0)
-):
+async def process_word(file: UploadFile = File(...)):
     try:
         content = await file.read()
         doc = Document(io.BytesIO(content))
         
-        # 1. AI Tự động chỉnh lề chuẩn đóng cuốn
-        for section in doc.sections:
-            section.left_margin, section.right_margin = Cm(le_trai), Cm(le_phai)
-            section.top_margin, section.bottom_margin = Cm(le_tren), Cm(le_duoi)
+        # AI TỰ ĐỌC VĂN BẢN ĐỂ BIẾT TRƯỜNG NÀO
+        full_text = "\n".join([p.text for p in doc.paragraphs[:10]]) # Chỉ đọc 10 dòng đầu cho nhanh
+        
+        rule = SCHOOL_RULES["DEFAULT"]
+        if "VĂN LANG" in full_text.upper():
+            rule = SCHOOL_RULES["VAN LANG"]
+            print("Phát hiện đồ án Văn Lang!")
+        elif "BÁCH KHOA" in full_text.upper():
+            rule = SCHOOL_RULES["BACH KHOA"]
 
-        # 2. AI Tự học cách ép font và xử lý mục lục (Bản siêu bền)
-        for p in doc.paragraphs:
-            try:
-                txt = p.text.strip()
-                # Tự nhận diện Chương/Mục để căn giữa
-                if re.match(r'^(CHƯƠNG|MỞ ĐẦU|KẾT LUẬN|DANH MỤC)', txt.upper()):
-                    p.alignment = 1 
-                
-                # Ép font Times New Roman an toàn
-                for run in p.runs:
-                    run.font.name = 'Times New Roman'
-                    rPr = run._element.get_or_add_rPr()
-                    rFonts = rPr.get_or_add_rFonts()
-                    rFonts.set(qn('w:eastAsia'), 'Times New Roman')
-                    rFonts.set(qn('w:ascii'), 'Times New Roman')
-                    rFonts.set(qn('w:hAnsi'), 'Times New Roman')
-            except:
-                continue # Nếu lỗi một đoạn nhỏ, AI tự bỏ qua để làm tiếp các đoạn khác
+        # TỰ ĐỘ FILE THEO LUẬT CỦA TRƯỜNG
+        for section in doc.sections:
+            section.left_margin = Cm(rule["left"])
+            section.right_margin = Cm(rule["right"])
+            section.top_margin = Cm(rule["top"])
+            section.bottom_margin = Cm(rule["bottom"])
 
         out_io = io.BytesIO()
         doc.save(out_io)
